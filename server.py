@@ -3,9 +3,10 @@ from email.policy import HTTP
 from time import timezone
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, validator
-from typing import  List,Dict
+from typing import  List, Dict
 import json
-import os.path
+import os
+import uuid
 
 class Task(BaseModel):
     name: str
@@ -13,6 +14,7 @@ class Task(BaseModel):
     status: str | None = "incomplete"
     creation_time : datetime = datetime.now()
     username : str
+    id : str = str(uuid.uuid4())
     class Config:
         json_encoders = {
             # custom output conversion for datetime
@@ -30,10 +32,9 @@ class Users(BaseModel):
         standard_dict =  super().dict(**kwargs)
         return standard_dict
 
-config = json.load(open("config.json", "r"))
+config: Dict = json.load(open("config.json", "r"))
 
 app = FastAPI()
-
 
 @app.on_event("startup")
 async def app_init():
@@ -42,16 +43,14 @@ async def app_init():
         with open("users.json", "w") as users_file:
             json.dump([], users_file)
 
-
-
 @app.get("/tasks")
 async def get_tasks(username: str):
-    json_tasks = json.load(open("tasks.json"))
+    json_tasks = json.load(open(f"users_tasks/{username}.json", "r"))
     return json_tasks
 
 @app.post("/registration")
 async def create_new_user(user: Users):
-    ex_users = json.load(open("users.json", "r"))
+    ex_users = json.load(open(config.get("users_path", "users.json"), "r"))
     for existed_user in ex_users:
         if user.login == existed_user["login"]:
             raise HTTPException(409,f"Username already exists. Choose another one.")
@@ -61,17 +60,30 @@ async def create_new_user(user: Users):
                 
 @app.post("/task")
 async def post_task(task: Task, user: Users):
-    pass
-    # tasks.append(task)
-    # dict_tasks = [task.dict() for task in tasks]
-    # with open("tasks.json","w") as tasks_file:
-    #     tasks_file.write(json.dumps(dict_tasks))
-    # return dict_tasks
-
+    # creating path to user's tasks file
+    os.makedirs(config.get("users_tasks_path", "users_tasks"),exist_ok=True)
+    # checking if the user's tasks file exists if not creating it 
+    if not os.path.isfile(f"users_tasks/{user.login}.json"):
+        with open(f"users_tasks/{user.login}.json", "w") as user_tasks_file:
+            json.dump([], user_tasks_file)
+    tasks = json.load(open(f"users_tasks/{user.login}.json", "r"))
+    tasks.append(task.dict())
+    json.dump(tasks, open(f"users_tasks/{user.login}.json", "w"))
+    return task
+    
 @app.put("/task")
-async def update_task(task: Task):
-    pass
-
+async def update_task(task: Task, user: Users):
+    task_uuid = task.id
+    tasks = json.load(open(f"users_tasks/{user.login}.json", "r"))
+    for tsk in tasks:
+        if tsk["id"] == task_uuid:
+            tasks.remove(tsk)
+    tasks.append(task.dict())
+    json.dump(tasks, open(f"users_tasks/{user.login}.json", "w"))
+    return task
+    
+    
+    
 # @app.delete("/task")
 # async def delete_task(task: Task):
 #     tasks.remove(task)
