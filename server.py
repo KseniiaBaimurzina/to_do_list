@@ -60,6 +60,7 @@ async def create_new_user(user: Users):
                 
 @app.post("/task")
 async def post_task(task: Task, user: Users):
+    task_id = task.id
     # creating path to user's tasks file
     os.makedirs(config.get("users_tasks_path", "users_tasks"),exist_ok=True)
     # checking if the user's tasks file exists if not creating it 
@@ -67,6 +68,9 @@ async def post_task(task: Task, user: Users):
         with open(f"users_tasks/{user.login}.json", "w") as user_tasks_file:
             json.dump([], user_tasks_file)
     tasks = json.load(open(f"users_tasks/{user.login}.json", "r"))
+    if tasks != []:
+        if task_id != task["id"]:
+            raise HTTPException(409,f"You cannot change task id.")
     tasks.append(task.dict())
     json.dump(tasks, open(f"users_tasks/{user.login}.json", "w"))
     return task
@@ -80,12 +84,18 @@ async def update_task(task: Task, user: Users):
             tasks.remove(tsk)
     tasks.append(task.dict())
     json.dump(tasks, open(f"users_tasks/{user.login}.json", "w"))
-    return task
+    return task    
     
-    
-    
-# @app.delete("/task")
-# async def delete_task(task: Task):
+@app.delete("/task")
+async def delete_task(task: Task, user: Users):
+    tasks = json.load(open(f"users_tasks/{user.login}.json", "r"))
+    for tsk in tasks:
+        if tsk == task:
+            tasks.remove(task)
+        else:
+            raise HTTPException(409,f"You don't have such task. Please, try to delete your task.")
+    json.dump(tasks, open(f"users_tasks/{user.login}.json", "w"))
+    return f"{task} successfully deleted"
 #     tasks.remove(task)
 #     dict_tasks = [task.dict() for task in tasks]
 #     with open("tasks.json","w") as tasks_file:
